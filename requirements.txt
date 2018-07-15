@@ -3,11 +3,12 @@
 
 #### ESSENTIAL LIBRARIES FOR MAIN FUNCTIONALITY ####
 
-# In order to use allennlp you will also need to install pytorch. Currently, the version depends on
-# your OS. Please visit http://pytorch.org/ and follow the instructions for installation.
+# This installs Pytorch for CUDA 8 only. If you are using a newer version,
+# please visit http://pytorch.org/ and install the relevant version.
+torch==0.4.0
 
 # Parameter parsing.
-pyhocon==0.3.35
+jsonnet==0.10.0
 
 # Type checking for python
 typing
@@ -25,12 +26,16 @@ spacy>=2.0,<2.1
 # Used by span prediction models.
 numpy
 
+# Used for reading configuration info out of numpy-style docstrings.
+numpydoc==0.8.0
+
 # Used in coreference resolution evaluation metrics.
 scipy
 scikit-learn
 
-# Training visualisation using tensorboard.
-tensorboard
+# Write logs for training visualisation with the Tensorboard application
+# Install the Tensorboard application separately (part of tensorflow) to view them.
+tensorboardX==1.2
 
 # Required by torch.utils.ffi
 cffi==1.11.2
@@ -43,18 +48,15 @@ flask==0.12.1
 flask-cors==3.0.3
 gevent==1.2.2
 
-# Talk to postgres demo database
-psycopg2
+# Used by semantic parsing code to strip diacritics from unicode strings.
+unidecode
 
 #### LIBRARIES USED IN SCRIPTS ####
-# argument parsing in for data cleaning scripts
-argparse
-
 # Used for downloading datasets over HTTP
 requests>=2.18
 
 # progress bars in data cleaning scripts
-tqdm
+tqdm>=4.19
 
 # In SQuAD eval script, we use this to see if we likely have some tokenization problem.
 editdistance
@@ -64,3 +66,17 @@ h5py
 
 # For timezone utilities
 pytz==2017.3
+
+#### ESSENTIAL TESTING-RELATED PACKAGES ####
+# We'll use pytest to run our tests; this isn't really necessary to run the code, but it is to run
+# the tests.  With this here, you can run the tests with `py.test` from the base directory.
+pytest
+
+# Allows marking tests as flaky, to be rerun if they fail
+flaky
+
+# Required to mock out `requests` calls
+responses>=0.7
+
+# Reads Universal Dependencies files.
+conllu

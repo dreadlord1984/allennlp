@@ -2,8 +2,20 @@
 A `Flask <http://flask.pocoo.org/>`_ server for serving predictions
 from a single AllenNLP model. It also includes a very, very bare-bones
 web front-end for exploring predictions (or you can provide your own).
+
+For example, if you have your own predictor and model in the `my_stuff` package,
+and you want to use the default HTML, you could run this like
+
+```
+python -m allennlp.service.server_simple \
+    --archive-path allennlp/tests/fixtures/bidaf/serialization/model.tar.gz \
+    --predictor machine-comprehension \
+    --title "Demo of the Machine Comprehension Text Fixture" \
+    --field-name question --field-name passage
+```
 """
 from typing import List, Callable
+import argparse
 import json
 import logging
 import os
@@ -12,22 +24,36 @@ import sys
 
 from flask import Flask, request, Response, jsonify, send_file, send_from_directory
 from flask_cors import CORS
-from gevent.wsgi import WSGIServer
+from gevent.pywsgi import WSGIServer
 
 from allennlp.common import JsonDict
+from allennlp.common.util import import_submodules
 from allennlp.models.archival import load_archive
-from allennlp.service.predictors import Predictor
-from allennlp.service.server_flask import ServerError
+from allennlp.predictors import Predictor
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
+class ServerError(Exception):
+    status_code = 400
+
+    def __init__(self, message, status_code=None, payload=None):
+        Exception.__init__(self)
+        self.message = message
+        if status_code is not None:
+            self.status_code = status_code
+        self.payload = payload
+
+    def to_dict(self):
+        error_dict = dict(self.payload or ())
+        error_dict['message'] = self.message
+        return error_dict
 
 
 def make_app(predictor: Predictor,
              field_names: List[str] = None,
              static_dir: str = None,
              sanitizer: Callable[[JsonDict], JsonDict] = None,
-             title: str = "AllenNLP Demo",
-             use_cors: bool = False) -> Flask:
+             title: str = "AllenNLP Demo") -> Flask:
     """
     Creates a Flask app that serves up the provided ``Predictor``
     along with a front-end for interacting with it.
@@ -46,10 +72,11 @@ def make_app(predictor: Predictor,
     (e.g. by removing probabilities or logits)
     you can do that by passing in a ``sanitizer`` function.
     """
-
-    if static_dir is not None and not os.path.exists(static_dir):
-        logger.error("app directory %s does not exist, aborting", static_dir)
-        sys.exit(-1)
+    if static_dir is not None:
+        static_dir = os.path.abspath(static_dir)
+        if not os.path.exists(static_dir):
+            logger.error("app directory %s does not exist, aborting", static_dir)
+            sys.exit(-1)
     elif static_dir is None and field_names is None:
         logger.error("must specify either build_dir or field_names")
         sys.exit(-1)
@@ -94,37 +121,48 @@ def make_app(predictor: Predictor,
         else:
             raise ServerError("static_dir not specified", 404)
 
-    if use_cors:
-        return CORS(app)
-    else:
-        return app
+    return app
 
 
-def main():
-    # Executing this file runs the simple service with the bidaf test fixture
+def main(args):
+    # Executing this file with no extra options runs the simple service with the bidaf test fixture
     # and the machine-comprehension predictor. There's no good reason you'd want
-    # to do this (except maybe to test changes to the stock HTML), but this shows
-    # you what you'd do in your own code to run your own demo.
+    # to do this, except possibly to test changes to the stock HTML).
 
-    # Make sure all the classes you need for your Model / Predictor / DatasetReader / etc...
-    # are imported here, because otherwise they can't be constructed ``from_params``.
+    parser = argparse.ArgumentParser(description='Serve up a simple model')
 
-    archive = load_archive('tests/fixtures/bidaf/serialization/model.tar.gz')
-    predictor = Predictor.from_archive(archive, 'machine-comprehension')
+    parser.add_argument('--archive-path', type=str, required=True, help='path to trained archive file')
+    parser.add_argument('--predictor', type=str, required=True, help='name of predictor')
+    parser.add_argument('--static-dir', type=str, help='serve index.html from this directory')
+    parser.add_argument('--title', type=str, help='change the default page title', default="AllenNLP Demo")
+    parser.add_argument('--field-name', type=str, required=True, action='append',
+                        help='field names to include in the demo')
+    parser.add_argument('--port', type=int, default=8000, help='port to serve the demo on')
 
-    def sanitizer(prediction: JsonDict) -> JsonDict:
-        """
-        Only want best_span results.
-        """
-        return {key: value
-                for key, value in prediction.items()
-                if key.startswith("best_span")}
+    parser.add_argument('--include-package',
+                        type=str,
+                        action='append',
+                        default=[],
+                        help='additional packages to include')
+
+    args = parser.parse_args(args)
+
+    # Load modules
+    for package_name in args.include_package:
+        import_submodules(package_name)
+
+    archive = load_archive(args.archive_path)
+    predictor = Predictor.from_archive(archive, args.predictor)
+    field_names = args.field_name
 
     app = make_app(predictor=predictor,
-                   field_names=['passage', 'question'],
-                   sanitizer=sanitizer)
+                   field_names=field_names,
+                   static_dir=args.static_dir,
+                   title=args.title)
+    CORS(app)
 
-    http_server = WSGIServer(('0.0.0.0', 8888), app)
+    http_server = WSGIServer(('0.0.0.0', args.port), app)
+    print(f"Model loaded, serving demo on port {args.port}")
     http_server.serve_forever()
 
 #
@@ -689,4 +727,4 @@ def _html(title: str, field_names: List[str]) -> str:
                                      qfl=quoted_field_list)
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

@@ -1,9 +1,7 @@
-# pylint: disable=no-self-use
 from typing import Dict
 
 from overrides import overrides
 import torch
-from torch.autograd import Variable
 
 from allennlp.data.fields.field import Field
 from allennlp.data.fields.sequence_field import SequenceField
@@ -38,17 +36,20 @@ class IndexField(Field[torch.Tensor]):
 
     @overrides
     def get_padding_lengths(self) -> Dict[str, int]:
+        # pylint: disable=no-self-use
         return {}
 
     @overrides
     def as_tensor(self,
                   padding_lengths: Dict[str, int],
-                  cuda_device: int = -1,
-                  for_training: bool = True) -> torch.Tensor:
+                  cuda_device: int = -1) -> torch.Tensor:
         # pylint: disable=unused-argument
-        tensor = Variable(torch.LongTensor([self.sequence_index]), volatile=not for_training)
+        tensor = torch.LongTensor([self.sequence_index])
         return tensor if cuda_device == -1 else tensor.cuda(cuda_device)
 
     @overrides
     def empty_field(self):
         return IndexField(-1, self.sequence_field.empty_field())
+
+    def __str__(self) -> str:
+        return f"IndexField with index: {self.sequence_index}."

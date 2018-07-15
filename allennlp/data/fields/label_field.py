@@ -3,7 +3,6 @@ import logging
 
 from overrides import overrides
 import torch
-from torch.autograd import Variable
 
 from allennlp.data.fields.field import Field
 from allennlp.data.vocabulary import Vocabulary
@@ -36,10 +35,11 @@ class LabelField(Field[torch.Tensor]):
         If your labels are 0-indexed integers, you can pass in this flag, and we'll skip the indexing
         step.  If this is ``False`` and your labels are not strings, this throws a ``ConfigurationError``.
     """
-    # It is possible that users want to use this field with a namespace which uses OOV/PAD tokens.
-    # This warning will be repeated for every instantiation of this class (i.e for every data
-    # instance), spewing a lot of warnings so this class variable is used to only log a single
-    # warning per namespace.
+    # Most often, you probably don't want to have OOV/PAD tokens with a LabelField, so we warn you
+    # about it when you pick a namespace that will getting these tokens by default.  It is
+    # possible, however, that you _do_ actually want OOV/PAD tokens with this Field.  This class
+    # variable is used to make sure that we only log a single warning for this per namespace, and
+    # not every time you create one of these Field objects.
     _already_warned_namespaces: Set[str] = set()
 
     def __init__(self,
@@ -89,12 +89,14 @@ class LabelField(Field[torch.Tensor]):
     @overrides
     def as_tensor(self,
                   padding_lengths: Dict[str, int],
-                  cuda_device: int = -1,
-                  for_training: bool = True) -> torch.Tensor:
-        # pylint: disable=unused-argument
-        tensor = Variable(torch.LongTensor([self._label_id]), volatile=not for_training)
+                  cuda_device: int = -1) -> torch.Tensor:
+        # pylint: disable=unused-argument,not-callable
+        tensor = torch.tensor(self._label_id, dtype=torch.long)
         return tensor if cuda_device == -1 else tensor.cuda(cuda_device)
 
     @overrides
     def empty_field(self):
         return LabelField(-1, self._label_namespace, skip_indexing=True)
+
+    def __str__(self) -> str:
+        return f"LabelField with label: {self.label} in namespace: '{self._label_namespace}'.'"

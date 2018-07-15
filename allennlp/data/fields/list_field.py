@@ -67,8 +67,7 @@ class ListField(SequenceField[DataArray]):
     @overrides
     def as_tensor(self,
                   padding_lengths: Dict[str, int],
-                  cuda_device: int = -1,
-                  for_training: bool = True) -> DataArray:
+                  cuda_device: int = -1) -> DataArray:
         padded_field_list = pad_sequence_to_length(self.field_list,
                                                    padding_lengths['num_fields'],
                                                    self.field_list[0].empty_field)
@@ -77,7 +76,7 @@ class ListField(SequenceField[DataArray]):
         child_padding_lengths = {key.replace('list_', '', 1): value
                                  for key, value in padding_lengths.items()
                                  if key.startswith('list_')}
-        padded_fields = [field.as_tensor(child_padding_lengths, cuda_device, for_training)
+        padded_fields = [field.as_tensor(child_padding_lengths, cuda_device)
                          for field in padded_field_list]
         return self.field_list[0].batch_tensors(padded_fields)
 
@@ -96,3 +95,8 @@ class ListField(SequenceField[DataArray]):
     def batch_tensors(self, tensor_list: List[DataArray]) -> DataArray:
         # We defer to the class we're wrapping in a list to handle the batching.
         return self.field_list[0].batch_tensors(tensor_list)
+
+    def __str__(self) -> str:
+        field_class = self.field_list[0].__class__.__name__
+        base_string = f"ListField of {len(self.field_list)} {field_class}s : \n"
+        return " ".join([base_string] + [f"\t {field} \n" for field in self.field_list])

@@ -3,6 +3,8 @@
 .coverage
 doc/_build/
 .ipynb_checkpoints
+.pytest_cache/
+allennlp/tools/EVALB/evalb.dSYM/
 
 # build artifacts
 allennlp.egg-info/
@@ -10,4 +12,3 @@ allennlp.egg-info/
 build/
 dist/
 .mypy_cache
-

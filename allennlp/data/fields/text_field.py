@@ -3,11 +3,11 @@ A ``TextField`` represents a string of text, the kind that you might want to rep
 standard word vectors, or pass through an LSTM.
 """
 from typing import Dict, List, Optional
+import textwrap
 
 from overrides import overrides
 from spacy.tokens import Token as SpacyToken
 import torch
-from torch.autograd import Variable
 
 from allennlp.common.checks import ConfigurationError
 from allennlp.data.fields.sequence_field import SequenceField
@@ -102,8 +102,7 @@ class TextField(SequenceField[Dict[str, torch.Tensor]]):
     @overrides
     def as_tensor(self,
                   padding_lengths: Dict[str, int],
-                  cuda_device: int = -1,
-                  for_training: bool = True) -> Dict[str, torch.Tensor]:
+                  cuda_device: int = -1) -> Dict[str, torch.Tensor]:
         tensors = {}
         desired_num_tokens = padding_lengths['num_tokens']
         for indexer_name, indexer in self._token_indexers.items():
@@ -116,7 +115,7 @@ class TextField(SequenceField[Dict[str, torch.Tensor]]):
             # than a LongTensor here, and it's not clear how to signal that.  Maybe we'll need to
             # add a class method to TokenIndexer to tell us the type?  But we can worry about that
             # when there's a compelling use case for it.
-            tensor = Variable(torch.LongTensor(padded_array), volatile=not for_training)
+            tensor = torch.LongTensor(padded_array)
             tensors[indexer_name] = tensor if cuda_device == -1 else tensor.cuda(cuda_device)
         return tensors
 
@@ -135,3 +134,12 @@ class TextField(SequenceField[Dict[str, torch.Tensor]]):
         # This is creating a dict of {token_indexer_key: batch_tensor} for each token indexer used
         # to index this field.
         return util.batch_tensor_dicts(tensor_list)
+
+    def __str__(self) -> str:
+        indexers = {name: indexer.__class__.__name__ for name, indexer in self._token_indexers.items()}
+
+        # Double tab to indent under the header.
+        formatted_text = "".join(["\t\t" + text + "\n"
+                                  for text in textwrap.wrap(repr(self.tokens), 100)])
+        return f"TextField of length {self.sequence_length()} with " \
+               f"text: \n {formatted_text} \t\tand TokenIndexers : {indexers}"

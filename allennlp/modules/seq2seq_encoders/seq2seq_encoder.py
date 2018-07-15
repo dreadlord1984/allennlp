@@ -1,5 +1,5 @@
 from allennlp.modules.encoder_base import _EncoderBase
-from allennlp.common import Params, Registrable
+from allennlp.common import Registrable
 
 
 class Seq2SeqEncoder(_EncoderBase, Registrable):
@@ -27,7 +27,10 @@ class Seq2SeqEncoder(_EncoderBase, Registrable):
         """
         raise NotImplementedError
 
-    @classmethod
-    def from_params(cls, params: Params) -> 'Seq2SeqEncoder':
-        choice = params.pop_choice('type', cls.list_available())
-        return cls.by_name(choice).from_params(params)
+    def is_bidirectional(self) -> bool:
+        """
+        Returns ``True`` if this encoder is bidirectional.  If so, we assume the forward direction
+        of the encoder is the first half of the final dimension, and the backward direction is the
+        second half.
+        """
+        raise NotImplementedError

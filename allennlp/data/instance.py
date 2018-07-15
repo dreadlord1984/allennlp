@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, MutableMapping
 
 from allennlp.data.fields.field import DataArray, Field
 from allennlp.data.vocabulary import Vocabulary
@@ -14,16 +14,27 @@ class Instance:
     as outputs.
 
     The ``Fields`` in an ``Instance`` can start out either indexed or un-indexed.  During the data
-    processing pipeline, all fields will end up as ``IndexedFields``, and will then be converted
-    into padded arrays by a ``DataGenerator``.
+    processing pipeline, all fields will be indexed, after which multiple instances can be combined
+    into a ``Batch`` and then converted into padded arrays.
 
     Parameters
     ----------
     fields : ``Dict[str, Field]``
         The ``Field`` objects that will be used to produce data arrays for this instance.
     """
-    def __init__(self, fields: Dict[str, Field]) -> None:
+    def __init__(self, fields: MutableMapping[str, Field]) -> None:
         self.fields = fields
+        self.indexed = False
+
+    def add_field(self, field_name: str, field: Field, vocab: Vocabulary = None) -> None:
+        """
+        Add the field to the existing fields mapping.
+        If we have already indexed the Instance, then we also index `field`, so
+        it is necessary to supply the vocab.
+        """
+        self.fields[field_name] = field
+        if self.indexed:
+            field.index(vocab)
 
     def count_vocab_items(self, counter: Dict[str, Dict[str, int]]):
         """
@@ -33,13 +44,20 @@ class Instance:
         for field in self.fields.values():
             field.count_vocab_items(counter)
 
-    def index_fields(self, vocab: Vocabulary):
+    def index_fields(self, vocab: Vocabulary) -> None:
         """
-        Converts all ``UnindexedFields`` in this ``Instance`` to ``IndexedFields``, given the
-        ``Vocabulary``.  This `mutates` the current object, it does not return a new ``Instance``.
+        Indexes all fields in this ``Instance`` using the provided ``Vocabulary``.
+        This `mutates` the current object, it does not return a new ``Instance``.
+        A ``DataIterator`` will call this on each pass through a dataset; we use the ``indexed``
+        flag to make sure that indexing only happens once.
+
+        This means that if for some reason you modify your vocabulary after you've
+        indexed your instances, you might get unexpected behavior.
         """
-        for field in self.fields.values():
-            field.index(vocab)
+        if not self.indexed:
+            self.indexed = True
+            for field in self.fields.values():
+                field.index(vocab)
 
     def get_padding_lengths(self) -> Dict[str, Dict[str, int]]:
         """
@@ -53,8 +71,7 @@ class Instance:
 
     def as_tensor_dict(self,
                        padding_lengths: Dict[str, Dict[str, int]] = None,
-                       cuda_device: int = -1,
-                       for_training: bool = True) -> Dict[str, DataArray]:
+                       cuda_device: int = -1) -> Dict[str, DataArray]:
         """
         Pads each ``Field`` in this instance to the lengths given in ``padding_lengths`` (which is
         keyed by field name, then by padding key, the same as the return value in
@@ -67,6 +84,11 @@ class Instance:
         tensors = {}
         for field_name, field in self.fields.items():
             tensors[field_name] = field.as_tensor(padding_lengths[field_name],
-                                                  cuda_device=cuda_device,
-                                                  for_training=for_training)
+                                                  cuda_device=cuda_device)
         return tensors
+
+
+    def __str__(self) -> str:
+        base_string = f"Instance with fields:\n"
+        return " ".join([base_string] + [f"\t {name}: {field} \n"
+                                         for name, field in self.fields.items()])

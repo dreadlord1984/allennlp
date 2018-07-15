@@ -1,9 +1,9 @@
 from typing import Dict, List, Union, Set
 import logging
+import textwrap
 
 from overrides import overrides
 import torch
-from torch.autograd import Variable
 
 from allennlp.common.checks import ConfigurationError
 from allennlp.common.util import pad_sequence_to_length
@@ -94,11 +94,10 @@ class SequenceLabelField(Field[torch.Tensor]):
     @overrides
     def as_tensor(self,
                   padding_lengths: Dict[str, int],
-                  cuda_device: int = -1,
-                  for_training: bool = True) -> torch.Tensor:
+                  cuda_device: int = -1) -> torch.Tensor:
         desired_num_tokens = padding_lengths['num_tokens']
         padded_tags = pad_sequence_to_length(self._indexed_labels, desired_num_tokens)
-        tensor = Variable(torch.LongTensor(padded_tags), volatile=not for_training)
+        tensor = torch.LongTensor(padded_tags)
         return tensor if cuda_device == -1 else tensor.cuda(cuda_device)
 
     @overrides
@@ -107,3 +106,10 @@ class SequenceLabelField(Field[torch.Tensor]):
         sequence_label_field = SequenceLabelField([], self.sequence_field.empty_field())
         sequence_label_field._indexed_labels = []
         return sequence_label_field
+
+    def __str__(self) -> str:
+        length = self.sequence_field.sequence_length()
+        formatted_labels = "".join(["\t\t" + labels + "\n"
+                                    for labels in textwrap.wrap(repr(self.labels), 100)])
+        return f"SequenceLabelField of length {length} with " \
+               f"labels:\n {formatted_labels} \t\tin namespace: '{self._label_namespace}'."

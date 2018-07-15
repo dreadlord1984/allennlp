@@ -1,6 +1,5 @@
-
+from overrides import overrides
 import torch
-from torch.autograd import Variable
 from torch.nn.utils.rnn import pad_packed_sequence
 
 from allennlp.common.checks import ConfigurationError
@@ -20,8 +19,8 @@ class PytorchSeq2SeqWrapper(Seq2SeqEncoder):
 
         - ``self.input_size: int``
         - ``self.hidden_size: int``
-        - ``def forward(inputs: PackedSequence, hidden_state: torch.autograd.Variable) ->
-          Tuple[PackedSequence, torch.autograd.Variable]``.
+        - ``def forward(inputs: PackedSequence, hidden_state: torch.Tensor) ->
+          Tuple[PackedSequence, torch.Tensor]``.
         - ``self.bidirectional: bool`` (optional)
 
     This is what pytorch's RNN's look like - just make sure your class looks like those, and it
@@ -44,20 +43,27 @@ class PytorchSeq2SeqWrapper(Seq2SeqEncoder):
             pass
 
         try:
-            is_bidirectional = self._module.bidirectional
+            self._is_bidirectional = self._module.bidirectional
         except AttributeError:
-            is_bidirectional = False
-        if is_bidirectional:
+            self._is_bidirectional = False
+        if self._is_bidirectional:
             self._num_directions = 2
         else:
             self._num_directions = 1
 
+    @overrides
     def get_input_dim(self) -> int:
         return self._module.input_size
 
+    @overrides
     def get_output_dim(self) -> int:
         return self._module.hidden_size * self._num_directions
 
+    @overrides
+    def is_bidirectional(self) -> bool:
+        return self._is_bidirectional
+
+    @overrides
     def forward(self,  # pylint: disable=arguments-differ
                 inputs: torch.Tensor,
                 mask: torch.Tensor,
@@ -87,8 +93,7 @@ class PytorchSeq2SeqWrapper(Seq2SeqEncoder):
         # Add back invalid rows.
         if num_valid < batch_size:
             _, length, output_dim = unpacked_sequence_tensor.size()
-            zeros = unpacked_sequence_tensor.data.new(batch_size - num_valid, length, output_dim).fill_(0)
-            zeros = Variable(zeros)
+            zeros = unpacked_sequence_tensor.new_zeros(batch_size - num_valid, length, output_dim)
             unpacked_sequence_tensor = torch.cat([unpacked_sequence_tensor, zeros], 0)
 
             # The states also need to have invalid rows added back.
@@ -96,8 +101,7 @@ class PytorchSeq2SeqWrapper(Seq2SeqEncoder):
                 new_states = []
                 for state in final_states:
                     num_layers, _, state_dim = state.size()
-                    zeros = state.data.new(num_layers, batch_size - num_valid, state_dim).fill_(0)
-                    zeros = Variable(zeros)
+                    zeros = state.new_zeros(num_layers, batch_size - num_valid, state_dim)
                     new_states.append(torch.cat([state, zeros], 1))
                 final_states = new_states
 
@@ -107,10 +111,9 @@ class PytorchSeq2SeqWrapper(Seq2SeqEncoder):
         # the RNN did not need to process them. We add them back on in the form of zeros here.
         sequence_length_difference = total_sequence_length - unpacked_sequence_tensor.size(1)
         if sequence_length_difference > 0:
-            zeros = unpacked_sequence_tensor.data.new(batch_size,
-                                                      sequence_length_difference,
-                                                      unpacked_sequence_tensor.size(-1)).fill_(0)
-            zeros = Variable(zeros)
+            zeros = unpacked_sequence_tensor.new_zeros(batch_size,
+                                                       sequence_length_difference,
+                                                       unpacked_sequence_tensor.size(-1))
             unpacked_sequence_tensor = torch.cat([unpacked_sequence_tensor, zeros], 1)
 
         if self.stateful:
